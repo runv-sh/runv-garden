@@ -9,9 +9,22 @@ Servidor alvo: `Debian 13` com `Apache`
 Antes de executar qualquer comando, confirme:
 
 1. `garden.runv.club` ja aponta para o IP publico do servidor.
-2. As portas `80` e `443` estao liberadas no firewall.
+2. As portas `80/tcp` e `443/tcp` estao liberadas no firewall.
 3. O repositorio do projeto esta acessivel por `git clone` no servidor.
 4. O deploy sera da landing `v0.0.1`, sem backend real ainda.
+
+## Portas necessarias
+
+Para o primeiro deploy com Apache + Certbot, abra somente:
+
+- `80/tcp`
+- `443/tcp`
+
+Nao recomendo porta publica aleatoria aqui, porque:
+
+- navegadores esperam HTTPS em `443`
+- o Certbot/Let's Encrypt funciona melhor com `80` e `443`
+- isso evita configuracao extra de reverse proxy ou portas nao padrao
 
 ## Ordem exata dos comandos no Debian 13
 
@@ -78,6 +91,20 @@ cat /etc/cron.d/certbot-renew-runv-garden
 systemctl status cron --no-pager
 ```
 
+## Desinstalacao`r`n`r`nO desinstalador remove apenas artefatos desta instalacao do `garden.runv.club`. Ele nao remove pacotes do sistema, nao mexe em outros sites e nao altera configuracoes globais fora do que foi criado por este deploy.`r`n`r`n## Desinstalacao
+
+Se precisar remover o deploy:
+
+```bash
+bash scripts/uninstall-garden-runv.sh
+```
+
+Se quiser apagar tambem certificado e codigo-fonte:
+
+```bash
+REMOVE_CERTS=true REMOVE_CODE=true bash scripts/uninstall-garden-runv.sh
+```
+
 ## Verificacoes no navegador
 
 Abrir:
@@ -120,3 +147,4 @@ Implementar o backend do `runv.club` para:
 3. validar 1 planta a cada 24h
 4. salvar planta, frase e mensagem
 5. entregar JSON/API para o front
+

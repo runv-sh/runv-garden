@@ -27,6 +27,8 @@ Abre em `http://localhost:3000`.
 - `npm run preview`
 - `npm run lint`
 - `npm run clean`
+- `bash scripts/install-garden-runv.sh` no Debian 13 para provisionar deploy + SSL
+- `bash scripts/uninstall-garden-runv.sh` no Debian 13 para remover o deploy
 
 ## Estrutura relevante
 

@@ -19,6 +19,15 @@ Saida esperada:
 
 - `dist/`
 
+## Portas necessarias
+
+Para este projeto com Apache e SSL valido, use apenas:
+
+- `80/tcp`
+- `443/tcp`
+
+Evite porta publica aleatoria neste primeiro deploy. HTTPS valido de navegador e Certbot dependem do fluxo padrao em `80` e `443`.
+
 ## Apache no Debian 13
 
 Exemplo de `VirtualHost` para `garden.runv.club`:
@@ -45,13 +54,38 @@ Exemplo de `VirtualHost` para `garden.runv.club`:
 </VirtualHost>
 ```
 
-Se houver HTTPS com Certbot, o fluxo recomendado e:
+## Script oficial de instalacao
 
-1. publicar o `dist/` em `/var/www/garden.runv.club/dist`
-2. ativar o site com `a2ensite`
-3. ativar `rewrite` com `a2enmod rewrite`
-4. recarregar Apache com `systemctl reload apache2`
-5. emitir certificado para `garden.runv.club`
+Use:
+
+- [scripts/install-garden-runv.sh](Z:\Códigos\runv-garden\scripts\install-garden-runv.sh)
+
+Ele provisiona:
+
+- Apache
+- Node/npm
+- build do front
+- SSL valido com Certbot
+- renovacao automatica via `certbot.timer` ou `cron`
+
+## Script oficial de desinstalacao
+
+Use:
+
+- [scripts/uninstall-garden-runv.sh](Z:\Códigos\runv-garden\scripts\uninstall-garden-runv.sh)
+
+Por padrao ele:
+
+- desativa o site no Apache
+- remove o `DocumentRoot`
+- remove o `VirtualHost`
+- preserva certificado e codigo-fonte
+
+Para apagar tambem certificado e codigo:
+
+```bash
+REMOVE_CERTS=true REMOVE_CODE=true bash scripts/uninstall-garden-runv.sh
+```
 
 ## Comando do runv.club
 
@@ -155,3 +189,4 @@ Se o `runv.club` ja tiver bot, painel ou servico web:
 - o front em `garden.runv.club` deve apenas consumir a lista de plantas
 
 Assim o Apache continua servindo o front, e a parte dinamica pode ficar atras de reverse proxy se necessario.
+
