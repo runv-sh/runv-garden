@@ -6,6 +6,31 @@ import {PlantSprite} from './PlantSprite';
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
+const getTooltipAnchorBottom = (plant: PlantInstance) => {
+  const scale = plant.composition.scale;
+
+  if (plant.tributeText) {
+    return 150 * scale;
+  }
+
+  switch (plant.composition.category) {
+    case 'tree':
+      return 155 * scale;
+    case 'flower':
+      return 44 * scale;
+    case 'cactus':
+      return 82 * scale;
+    case 'bush':
+      return 92 * scale;
+    case 'mushroom':
+      return 56 * scale;
+    case 'special':
+      return 108 * scale;
+    default:
+      return 86 * scale;
+  }
+};
+
 export const GardenWorld: React.FC = () => {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({x: 0, y: 0});
@@ -200,6 +225,7 @@ export const GardenWorld: React.FC = () => {
 
         {plants.map((plant) => {
           const isHovered = hoveredPlant?.id === plant.id || selectedPlant?.id === plant.id;
+          const tooltipBottom = getTooltipAnchorBottom(plant);
           return (
             <div
               key={plant.id}
@@ -247,7 +273,8 @@ export const GardenWorld: React.FC = () => {
                     initial={{opacity: 0, scale: 0.92, y: 8}}
                     animate={{opacity: 1, scale: 1, y: 0}}
                     exit={{opacity: 0, scale: 0.92, y: 8}}
-                    className="absolute bottom-full left-1/2 z-[9999] mb-1 -translate-x-1/2 pointer-events-none"
+                    className="absolute left-1/2 z-[9999] -translate-x-1/2 pointer-events-none"
+                    style={{bottom: tooltipBottom}}
                   >
                     <div
                       className={`max-w-[240px] rounded-3xl px-4 py-3 text-[11px] font-semibold text-[#f7fbe9] shadow-2xl backdrop-blur ${
