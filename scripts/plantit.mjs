@@ -27,6 +27,7 @@ Regras:
   - o nome exibido no site vem do usuario Linux que executou o comando
   - a planta vai para o garden.runv.club
   - novas plantas crescem ao redor da homenagem central
+  - o sistema evita sobreposicao entre plantas
   - a mensagem e opcional`);
 }
 
@@ -45,6 +46,23 @@ function sanitizeMessage(value) {
   const compact = value.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
   const cleaned = compact.replace(/[^\p{L}\p{N}\p{P}\p{Zs}]/gu, '');
   return cleaned.slice(0, MAX_MESSAGE_LENGTH) || undefined;
+}
+
+function formatRemainingTime(targetDate, now) {
+  const diffMs = Math.max(0, targetDate.getTime() - now.getTime());
+  const totalMinutes = Math.ceil(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours <= 0) {
+    return `${minutes}min`;
+  }
+
+  if (minutes === 0) {
+    return `${hours}h`;
+  }
+
+  return `${hours}h ${minutes}min`;
 }
 
 function hashSeed(seed) {
@@ -66,32 +84,118 @@ function distance(a, b) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+function getPlantRadius(plant) {
+  if (plant.id === HERO_ID || plant.bonusType === '365days') {
+    return 250;
+  }
+
+  switch (plant.presetId) {
+    case 'tree-green':
+    case 'tree-rosy':
+      return 170;
+    case 'special-fern':
+      return 150;
+    case 'bush':
+      return 130;
+    case 'cactus':
+      return 105;
+    case 'mushroom':
+      return 90;
+    case 'flower-rare':
+      return 96;
+    case 'flower-soft':
+      return 82;
+    default:
+      break;
+  }
+
+  switch (plant.bonusType) {
+    case '180days':
+      return 165;
+    case '90days':
+      return 185;
+    case '30days':
+      return 105;
+    case '7days':
+      return 96;
+    default:
+      return 120;
+  }
+}
+
+function getCandidateRadius(seed) {
+  if (ratio(seed, 71) > 0.8) {
+    const bonusType = BONUS_POOL[Math.floor(ratio(seed, 72) * BONUS_POOL.length)];
+    switch (bonusType) {
+      case '180days':
+        return 165;
+      case '90days':
+        return 185;
+      case '30days':
+        return 105;
+      case '7days':
+        return 96;
+      default:
+        return 120;
+    }
+  }
+
+  const presetId = PRESET_POOL[Math.floor(ratio(seed, 73) * PRESET_POOL.length)];
+  switch (presetId) {
+    case 'tree-green':
+    case 'tree-rosy':
+      return 170;
+    case 'special-fern':
+      return 150;
+    case 'bush':
+      return 130;
+    case 'cactus':
+      return 105;
+    case 'mushroom':
+      return 90;
+    case 'flower-rare':
+      return 96;
+    case 'flower-soft':
+      return 82;
+    default:
+      return 120;
+  }
+}
+
+function getClearance(candidate, plants, candidateRadius) {
+  return plants.reduce((min, plant) => {
+    const requiredGap = candidateRadius + getPlantRadius(plant) + 24;
+    return Math.min(min, distance(candidate, plant) - requiredGap);
+  }, Infinity);
+}
+
 function pickPosition(plants, seed) {
   const hero = plants.find((plant) => plant.id === HERO_ID);
   const margin = 240;
   const center = hero ? {x: hero.x, y: hero.y} : {x: WORLD_SIZE / 2, y: WORLD_SIZE / 2};
+  const candidateRadius = getCandidateRadius(seed);
   let best = center;
-  let bestScore = -1;
+  let bestScore = -Infinity;
   const idealRadius = (HERO_RING_MIN_DISTANCE + HERO_RING_MAX_DISTANCE) / 2;
 
-  for (let attempt = 0; attempt < 360; attempt += 1) {
+  for (let attempt = 0; attempt < 720; attempt += 1) {
     const angle = ratio(seed, attempt + 1) * Math.PI * 2;
     const radius = HERO_RING_MIN_DISTANCE + ratio(seed, attempt + 501) * (HERO_RING_MAX_DISTANCE - HERO_RING_MIN_DISTANCE);
     const x = Math.round(Math.max(margin, Math.min(WORLD_SIZE - margin, center.x + Math.cos(angle) * radius)));
     const y = Math.round(Math.max(margin, Math.min(WORLD_SIZE - margin, center.y + Math.sin(angle) * radius)));
     const candidate = {x, y};
 
-    const nearestPlant = plants.reduce((min, plant) => Math.min(min, distance(candidate, plant)), Infinity);
+    const clearance = getClearance(candidate, plants, candidateRadius);
     const heroDistance = hero ? distance(candidate, hero) : distance(candidate, center);
     const edgeDistance = Math.min(x, y, WORLD_SIZE - x, WORLD_SIZE - y);
     const ringDistance = Math.abs(heroDistance - idealRadius);
-    const score = Math.min(nearestPlant * 1.35, edgeDistance * 1.1, HERO_RING_MAX_DISTANCE - ringDistance);
+    const score = Math.min(clearance * 2.2, edgeDistance * 1.1, HERO_RING_MAX_DISTANCE - ringDistance);
 
     if (heroDistance < HERO_RING_MIN_DISTANCE || heroDistance > HERO_RING_MAX_DISTANCE) {
       continue;
     }
 
-    if (nearestPlant >= 150) {
+    if (clearance >= 0) {
       return candidate;
     }
 
@@ -227,7 +331,7 @@ function main() {
     const nextAllowedAt = enforceCooldown(lastPlant, now);
     if (nextAllowedAt) {
       console.error(`Voce ja plantou nas ultimas 24 horas, ${username}.`);
-      console.error(`Proximo plantio liberado em: ${nextAllowedAt.toISOString()}`);
+      console.error(`Tempo restante: ${formatRemainingTime(nextAllowedAt, now)}`);
       process.exit(1);
     }
 
