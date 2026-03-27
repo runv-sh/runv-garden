@@ -1,5 +1,8 @@
 {
   "name": "RUNV Garden",
+  "version": "0.0.1",
   "description": "Um jardim comunitário em pixel art isométrica onde cada planta nasce de um comando.",
+  "creator": "pmurad",
+  "email": "pablomurad@pm.me",
   "requestFramePermissions": []
 }

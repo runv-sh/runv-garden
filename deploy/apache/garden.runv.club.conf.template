@@ -1,0 +1,23 @@
+<VirtualHost *:80>
+    ServerName __APP_DOMAIN__
+    ServerAdmin __ADMIN_EMAIL__
+    DocumentRoot __WEB_ROOT__
+
+    <Directory __WEB_ROOT__>
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ /index.html [L]
+
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options SAMEORIGIN
+    Header always set Referrer-Policy strict-origin-when-cross-origin
+
+    ErrorLog ${APACHE_LOG_DIR}/__APP_DOMAIN__-error.log
+    CustomLog ${APACHE_LOG_DIR}/__APP_DOMAIN__-access.log combined
+</VirtualHost>

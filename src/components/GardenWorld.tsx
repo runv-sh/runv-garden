@@ -1,189 +1,309 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { PlantInstance, USERS } from '../types';
-import { PRESETS, BONUS_PLANTS } from '../data/plantData';
-import { PlantRenderer } from './PlantRenderer';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {AnimatePresence, motion} from 'motion/react';
+import {loadGardenWorld, WORLD_SIZE} from '../data/gardenWorld';
+import type {PlantInstance} from '../types';
+import {PlantSprite} from './PlantSprite';
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 export const GardenWorld: React.FC = () => {
-  const worldRef = useRef<HTMLDivElement>(null);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [offset, setOffset] = useState({x: 0, y: 0});
+  const [zoom, setZoom] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [hoveredPlant, setHoveredPlant] = useState<string | null>(null);
+  const [dragPointer, setDragPointer] = useState({x: 0, y: 0});
+  const [hoveredPlant, setHoveredPlant] = useState<PlantInstance | null>(null);
+  const [selectedPlant, setSelectedPlant] = useState<PlantInstance | null>(null);
+  const [plants, setPlants] = useState<PlantInstance[]>([]);
+  const [worldSize, setWorldSize] = useState(WORLD_SIZE);
+  const heroPlant = plants.find((plant) => plant.id === 'hero-auroramurad') ?? null;
+  const scaledWorldSize = worldSize * zoom;
 
-  // Generate a clustered world of plants
-  const plants = useMemo(() => {
-    const worldSize = 3000;
-    const count = 120;
-    const instances: PlantInstance[] = [];
-    const clusterRadius = 180; // Max distance from cluster center/previous plant
+  const decorativePatches = useMemo(
+    () =>
+      Array.from({length: 26}, (_, index) => ({
+        id: `patch-${index}`,
+        x: 140 + ((index * 173) % (worldSize - 280)),
+        y: 140 + ((index * 241) % (worldSize - 280)),
+        width: 120 + ((index * 33) % 160),
+        height: 72 + ((index * 27) % 110),
+        rotation: (index * 19) % 360,
+        opacity: 0.12 + (index % 4) * 0.03,
+      })),
+    [worldSize],
+  );
 
-    let lastX = worldSize / 2;
-    let lastY = worldSize / 2;
+  const grassPatches = useMemo(
+    () => [
+      {id: 'grass-a', src: '/assets/plants/ground/grass-tile-a.png', x: heroPlant ? heroPlant.x - 180 : 1780, y: heroPlant ? heroPlant.y + 40 : 2240, scale: 1},
+      {id: 'grass-b', src: '/assets/plants/ground/grass-tile-b.png', x: heroPlant ? heroPlant.x + 60 : 2140, y: heroPlant ? heroPlant.y + 70 : 2270, scale: 0.94},
+      {id: 'grass-c', src: '/assets/plants/ground/grass-tile-a.png', x: heroPlant ? heroPlant.x - 10 : 2060, y: heroPlant ? heroPlant.y - 170 : 2030, scale: 0.82},
+      {id: 'grass-d', src: '/assets/plants/ground/grass-tile-b.png', x: heroPlant ? heroPlant.x - 280 : 1620, y: heroPlant ? heroPlant.y - 80 : 2120, scale: 0.76},
+    ],
+    [heroPlant],
+  );
 
-    for (let i = 0; i < count; i++) {
-      const isBonus = Math.random() > 0.85;
-      const bonusKeys = Object.keys(BONUS_PLANTS);
-      const bonusType = bonusKeys[Math.floor(Math.random() * bonusKeys.length)] as any;
-      
-      const composition = isBonus 
-        ? BONUS_PLANTS[bonusType] 
-        : PRESETS[Math.floor(Math.random() * PRESETS.length)];
+  const clampOffset = (nextX: number, nextY: number) => {
+    const viewportWidth = viewportRef.current?.clientWidth ?? window.innerWidth;
+    const viewportHeight = viewportRef.current?.clientHeight ?? window.innerHeight;
 
-      // Clustered positioning logic
-      // 10% chance to start a new cluster far away, otherwise stay near last plant
-      if (i > 0 && Math.random() > 0.1) {
-        const angle = Math.random() * Math.PI * 2;
-        const distance = 40 + Math.random() * clusterRadius;
-        lastX = Math.max(100, Math.min(worldSize - 100, lastX + Math.cos(angle) * distance));
-        lastY = Math.max(100, Math.min(worldSize - 100, lastY + Math.sin(angle) * distance));
-      } else {
-        lastX = 200 + Math.random() * (worldSize - 400);
-        lastY = 200 + Math.random() * (worldSize - 400);
-      }
-
-      instances.push({
-        id: `plant-${i}`,
-        composition,
-        creator: USERS[Math.floor(Math.random() * USERS.length)],
-        x: lastX,
-        y: lastY,
-        bonusType: isBonus ? bonusType : undefined
-      });
-    }
-    return instances.sort((a, b) => a.y - b.y);
-  }, []);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+    return {
+      x: clamp(nextX, viewportWidth - scaledWorldSize - 140, 140),
+      y: clamp(nextY, viewportHeight - scaledWorldSize - 140, 140),
+    };
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    setOffset({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
+  const focusOnPoint = (focusX: number, focusY: number, nextZoom: number) => {
+    const viewportWidth = viewportRef.current?.clientWidth ?? window.innerWidth;
+    const viewportHeight = viewportRef.current?.clientHeight ?? window.innerHeight;
+    const nextScaledWorldSize = worldSize * nextZoom;
+
+    return {
+      x: clamp(viewportWidth / 2 - focusX * nextZoom, viewportWidth - nextScaledWorldSize - 140, 140),
+      y: clamp(viewportHeight / 2 - focusY * nextZoom + 130, viewportHeight - nextScaledWorldSize - 140, 140),
+    };
+  };
+
+  useEffect(() => {
+    let alive = true;
+    loadGardenWorld()
+      .then((world) => {
+        if (!alive) return;
+        setPlants(world.plants);
+        setWorldSize(world.worldSize);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setPlants([]);
+        setWorldSize(WORLD_SIZE);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const centerWorld = () => {
+      const viewportWidth = viewportRef.current?.clientWidth ?? window.innerWidth;
+      const viewportHeight = viewportRef.current?.clientHeight ?? window.innerHeight;
+      const focusX = heroPlant?.x ?? worldSize / 2;
+      const focusY = heroPlant?.y ?? worldSize / 2;
+
+      setOffset(focusOnPoint(focusX, focusY, zoom));
+    };
+
+    centerWorld();
+    window.addEventListener('resize', centerWorld);
+    return () => window.removeEventListener('resize', centerWorld);
+  }, [heroPlant, worldSize, zoom]);
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsDragging(true);
+    setDragPointer({
+      x: event.clientX - offset.x,
+      y: event.clientY - offset.y,
     });
   };
 
-  const handleMouseUp = () => {
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    setOffset(clampOffset(event.clientX - dragPointer.x, event.clientY - dragPointer.y));
+  };
+
+  const endDrag = () => {
     setIsDragging(false);
   };
 
-  // Center on start
-  useEffect(() => {
-    if (worldRef.current) {
-      setOffset({
-        x: (window.innerWidth - 3000) / 2,
-        y: (window.innerHeight - 3000) / 2
-      });
+  const updateZoom = (delta: number) => {
+    const nextZoom = clamp(Number((zoom + delta).toFixed(2)), 0.7, 1.8);
+    setZoom(nextZoom);
+    if (heroPlant) {
+      setOffset(focusOnPoint(heroPlant.x, heroPlant.y, nextZoom));
     }
-  }, []);
+  };
 
   return (
-    <div 
-      className={`w-full h-full overflow-hidden bg-[#88aa55] relative ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+    <div
+      ref={viewportRef}
+      className={`relative h-full w-full overflow-hidden ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+      onClick={() => setSelectedPlant(null)}
+      onWheel={(event) => {
+        event.preventDefault();
+        updateZoom(event.deltaY > 0 ? -0.08 : 0.08);
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onPointerLeave={endDrag}
     >
-      <motion.div 
-        ref={worldRef}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,247,214,0.55),_transparent_34%),linear-gradient(180deg,_#dfe8bd_0%,_#a5bb69_18%,_#6e8f42_55%,_#4d6a35_100%)]" />
+      <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_20%_30%,_rgba(255,255,255,0.36),_transparent_22%),radial-gradient(circle_at_78%_18%,_rgba(246,255,214,0.28),_transparent_18%),radial-gradient(circle_at_68%_78%,_rgba(27,59,24,0.18),_transparent_28%)]" />
+
+      <motion.div
         className="absolute"
-        style={{ 
-          width: 3000, 
-          height: 3000,
+        style={{
+          width: worldSize,
+          height: worldSize,
           left: offset.x,
           top: offset.y,
+          transform: `scale(${zoom})`,
+          transformOrigin: 'top left',
         }}
       >
-        {/* Grid Background */}
-        <div 
-          className="absolute inset-0 opacity-10"
-          style={{ 
-            backgroundImage: `linear-gradient(#779944 1px, transparent 1px), linear-gradient(90deg, #779944 1px, transparent 1px)`,
-            backgroundSize: '64px 64px'
+        <div
+          className="absolute inset-0 opacity-[0.08]"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(45, 77, 31, 0.7) 1px, transparent 1px), linear-gradient(90deg, rgba(45, 77, 31, 0.7) 1px, transparent 1px)',
+            backgroundSize: '84px 84px',
           }}
         />
 
-        {/* Decorative patches */}
-        {[...Array(20)].map((_, i) => (
-          <div 
-            key={i}
-            className="absolute bg-[#779944] rounded-full opacity-30"
+        {decorativePatches.map((patch) => (
+          <div
+            key={patch.id}
+            className="absolute rounded-[999px]"
             style={{
-              width: 100 + Math.random() * 200,
-              height: 60 + Math.random() * 100,
-              left: Math.random() * 3000,
-              top: Math.random() * 3000,
-              filter: 'blur(20px)'
+              left: patch.x,
+              top: patch.y,
+              width: patch.width,
+              height: patch.height,
+              opacity: patch.opacity,
+              transform: `rotate(${patch.rotation}deg)`,
+              filter: 'blur(22px)',
+              background:
+                'radial-gradient(circle, rgba(46, 86, 41, 0.85) 0%, rgba(96, 134, 67, 0.45) 52%, rgba(96, 134, 67, 0) 82%)',
             }}
           />
         ))}
 
-        {/* Plants */}
-        {plants.map((plant) => (
-          <div
-            key={plant.id}
-            className="absolute"
-            style={{ 
-              left: plant.x, 
-              top: plant.y,
-              zIndex: Math.floor(plant.y)
+        {grassPatches.map((patch) => (
+          <img
+            key={patch.id}
+            src={patch.src}
+            alt=""
+            draggable={false}
+            className="absolute pointer-events-none select-none"
+            style={{
+              left: patch.x,
+              top: patch.y,
+              opacity: 0.32,
+              imageRendering: 'pixelated',
+              transform: `translate(-50%, -50%) scale(${patch.scale})`,
+              filter: 'saturate(0.92) brightness(1.02)',
             }}
-            onMouseEnter={() => setHoveredPlant(plant.id)}
-            onMouseLeave={() => setHoveredPlant(null)}
-          >
-            <motion.div
-              animate={{ 
-                rotate: [0, 1, 0, -1, 0],
-                scale: hoveredPlant === plant.id ? 1.1 : 1
-              }}
-              transition={{ 
-                rotate: { duration: 5 + Math.random() * 5, repeat: Infinity, ease: "easeInOut" },
-                scale: { duration: 0.2 }
-              }}
-              className="relative"
-            >
-              <PlantRenderer 
-                composition={plant.composition} 
-                className={plant.composition.category === 'tree' ? 'w-24 h-32' : 'w-12 h-16'}
-              />
-              
-              {/* Bonus Indicator */}
-              {plant.bonusType && (
-                <div className="absolute -top-2 -right-2 w-4 h-4 bg-yellow-400 rounded-full border-2 border-white animate-pulse" />
-              )}
-            </motion.div>
-
-            {/* Tooltip */}
-            <AnimatePresence>
-              {hoveredPlant === plant.id && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8, y: 10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.8, y: 10 }}
-                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 z-[9999] pointer-events-none"
-                >
-                  <div className="bg-[#2d3a2d] text-white px-4 py-2 rounded-lg text-xs font-medium shadow-2xl border-2 border-[#4a5d4a] whitespace-nowrap tooltip-pop">
-                    Criado por {plant.creator}
-                    {plant.bonusType && (
-                      <div className="text-[8px] opacity-60 uppercase mt-1">Recompensa {plant.bonusType}</div>
-                    )}
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-6 border-l-transparent border-r-6 border-r-transparent border-t-6 border-t-[#2d3a2d]"></div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+          />
         ))}
+
+        {plants.map((plant) => {
+          const isHovered = hoveredPlant?.id === plant.id || selectedPlant?.id === plant.id;
+          return (
+            <div
+              key={plant.id}
+              className="absolute"
+              style={{
+                left: plant.x,
+                top: plant.y,
+                zIndex: Math.floor(plant.y),
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedPlant((current) => (current?.id === plant.id ? null : plant));
+              }}
+              onPointerEnter={() => setHoveredPlant(plant)}
+              onPointerLeave={() => setHoveredPlant((current) => (current?.id === plant.id ? null : current))}
+            >
+              <motion.div
+                animate={{
+                  rotate: [0, plant.composition.swayAmplitude, 0, -plant.composition.swayAmplitude * 0.8, 0],
+                  y: [0, -1.5, 0],
+                  scale: isHovered ? 1.08 : 1,
+                }}
+                transition={{
+                  rotate: {
+                    duration: plant.composition.swayDuration,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                  },
+                  y: {
+                    duration: plant.composition.swayDuration * 0.72,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                  },
+                  scale: {duration: 0.18},
+                }}
+                className="relative"
+              >
+                <PlantSprite composition={plant.composition} highlighted={isHovered} />
+              </motion.div>
+
+              <AnimatePresence>
+                {isHovered ? (
+                  <motion.div
+                    initial={{opacity: 0, scale: 0.92, y: 8}}
+                    animate={{opacity: 1, scale: 1, y: 0}}
+                    exit={{opacity: 0, scale: 0.92, y: 8}}
+                    className="absolute bottom-full left-1/2 z-[9999] mb-0 -translate-x-1/2 -translate-y-2 pointer-events-none"
+                  >
+                    <div
+                      className={`max-w-[240px] rounded-3xl px-4 py-3 text-[11px] font-semibold text-[#f7fbe9] shadow-2xl backdrop-blur ${
+                        plant.tributeText
+                          ? 'border border-[#f8e9b0]/80 bg-[#2b3b1c]/92 tracking-[0.03em]'
+                          : 'border border-[#eef6d6]/70 bg-[#20331f]/90 uppercase tracking-[0.12em]'
+                      }`}
+                    >
+                      {plant.tributeText ? (
+                        <div className="leading-relaxed">{plant.tributeText}</div>
+                      ) : (
+                        <div>{`Criado por ${plant.creator}`}</div>
+                      )}
+                      {plant.phrase ? (
+                        <div className="mt-2 text-[10px] font-medium tracking-[0.02em] text-[#d8e7c7] normal-case">
+                          {plant.phrase}
+                        </div>
+                      ) : null}
+                      {plant.message ? (
+                        <div className="mt-2 text-[10px] italic font-medium tracking-[0.01em] text-[#f1e9cf] normal-case">
+                          "{plant.message}"
+                        </div>
+                      ) : null}
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
+          );
+        })}
+
+        {plants.length === 0 ? (
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#eef6d6]/50 bg-[#20331f]/80 px-5 py-3 text-xs font-semibold tracking-[0.08em] text-[#f7fbe9] shadow-xl backdrop-blur">
+            A preparar o jardim...
+          </div>
+        ) : null}
       </motion.div>
 
-      {/* Navigation Hint */}
-      <div className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-md px-6 py-2 rounded-full border border-white/20 text-[10px] uppercase tracking-widest text-white font-bold pointer-events-none">
-        Arraste para explorar o jardim
+      <div className="pointer-events-none absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full border border-white/20 bg-[#f4f6e5]/12 px-5 py-2 text-[10px] font-bold uppercase tracking-[0.28em] text-[#f6fae7] backdrop-blur-md">
+        Arraste para explorar · roda do mouse para zoom
+      </div>
+
+      <div className="absolute right-4 top-1/2 z-[10001] flex -translate-y-1/2 flex-col gap-2">
+        <button
+          type="button"
+          onClick={() => updateZoom(0.12)}
+          className="rounded-full border border-[#f3f2dc]/60 bg-[#23361f]/80 px-4 py-2 text-sm font-bold text-[#f8f5dc] shadow-xl backdrop-blur"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={() => updateZoom(-0.12)}
+          className="rounded-full border border-[#f3f2dc]/60 bg-[#23361f]/80 px-4 py-2 text-sm font-bold text-[#f8f5dc] shadow-xl backdrop-blur"
+        >
+          -
+        </button>
       </div>
     </div>
   );

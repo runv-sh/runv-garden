@@ -1,0 +1,97 @@
+{
+  "version": "0.0.1",
+  "plants": [
+    {
+      "id": "hero-auroramurad",
+      "username": "auroramurad",
+      "tributeText": "Em sua doce lembrança, Dona Aurora Murad",
+      "message": "O começo do jardim vive em sua memória.",
+      "plantedAt": "2026-03-27T00:00:00.000Z",
+      "x": 2100,
+      "y": 2220,
+      "bonusType": "365days",
+      "presetId": "special-fern"
+    },
+    {
+      "id": "plant-ana",
+      "username": "ana",
+      "message": "Que esse canto siga florescendo.",
+      "plantedAt": "2026-03-27T09:00:00.000Z",
+      "x": 1810,
+      "y": 2410,
+      "presetId": "flower-soft"
+    },
+    {
+      "id": "plant-leo",
+      "username": "leo",
+      "message": "Deixei uma planta para marcar minha passagem.",
+      "plantedAt": "2026-03-27T09:10:00.000Z",
+      "x": 2410,
+      "y": 2360,
+      "presetId": "tree-green"
+    },
+    {
+      "id": "plant-sofia",
+      "username": "sofia",
+      "message": "Todo jardim bom pede cuidado e tempo.",
+      "plantedAt": "2026-03-27T09:25:00.000Z",
+      "x": 2500,
+      "y": 1980,
+      "presetId": "bush"
+    },
+    {
+      "id": "plant-caio",
+      "username": "caio",
+      "message": "Um broto discreto para o mapa crescer.",
+      "plantedAt": "2026-03-27T09:32:00.000Z",
+      "x": 1650,
+      "y": 2010,
+      "presetId": "cactus"
+    },
+    {
+      "id": "plant-maya",
+      "username": "maya",
+      "message": "Mais cor para esse chão bonito.",
+      "plantedAt": "2026-03-27T09:47:00.000Z",
+      "x": 2010,
+      "y": 1760,
+      "presetId": "flower-rare"
+    },
+    {
+      "id": "plant-rui",
+      "username": "rui",
+      "message": "Uma sombra boa também cuida da praça.",
+      "plantedAt": "2026-03-27T10:00:00.000Z",
+      "x": 2780,
+      "y": 2250,
+      "bonusType": "90days"
+    },
+    {
+      "id": "plant-luna",
+      "username": "luna",
+      "message": "Pequenas plantas também fazem paisagem.",
+      "plantedAt": "2026-03-27T10:20:00.000Z",
+      "x": 1420,
+      "y": 2280,
+      "presetId": "mushroom"
+    },
+    {
+      "id": "plant-noah",
+      "username": "noah",
+      "message": "Um detalhe raro para o jardim respirar.",
+      "plantedAt": "2026-03-27T10:40:00.000Z",
+      "x": 2280,
+      "y": 2590,
+      "bonusType": "180days"
+    },
+    {
+      "id": "plant-iris",
+      "username": "iris",
+      "message": "Que haja sempre um lugar para pousar.",
+      "plantedAt": "2026-03-27T11:00:00.000Z",
+      "x": 1910,
+      "y": 2670,
+      "bonusType": "30days"
+    }
+  ]
+}

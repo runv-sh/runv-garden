@@ -1,36 +1,75 @@
-import React from 'react';
+export type PlantCategory =
+  | 'tree'
+  | 'flower'
+  | 'cactus'
+  | 'bush'
+  | 'mushroom'
+  | 'special';
 
-export type Category = 'tree' | 'flower' | 'cactus' | 'bush' | 'mushroom' | 'special';
+export type PlantRarity = 'common' | 'rare' | 'legendary';
 
-export interface PlantPart {
-  id: string;
-  svg: (color: string) => React.ReactNode;
+export type BonusType = '7days' | '30days' | '90days' | '180days' | '365days';
+
+export interface PlantLayer {
+  src: string;
+  offsetX?: number;
+  offsetY?: number;
+  scale?: number;
+  opacity?: number;
+  filter?: string;
+  flipX?: boolean;
+  zIndex?: number;
+}
+
+export interface PlantShadow {
+  width: number;
+  height: number;
+  opacity: number;
+  blur: number;
 }
 
 export interface PlantComposition {
-  category: Category;
-  baseId: string;
-  bodyId: string;
-  detailId?: string;
-  colors: {
-    primary: string;
-    secondary: string;
-    accent?: string;
-  };
+  category: PlantCategory;
+  rarity: PlantRarity;
   scale: number;
-  rarity: 'common' | 'rare' | 'legendary';
+  shadow: PlantShadow;
+  swayDuration: number;
+  swayAmplitude: number;
+  layers: PlantLayer[];
+  glow?: string;
+  sparkle?: boolean;
 }
 
 export interface PlantInstance {
   id: string;
-  composition: PlantComposition;
   creator: string;
-  x: number; // World coordinates
+  tributeText?: string;
+  phrase?: string;
+  message?: string;
+  plantedAt?: string;
+  x: number;
   y: number;
-  bonusType?: '7days' | '30days' | '90days' | '180days' | '365days';
+  footprint: number;
+  composition: PlantComposition;
+  bonusType?: BonusType;
 }
 
-export const USERS = [
-  '@pmurad', '@ana', '@leo', '@sofia', '@caio', 
-  '@maya', '@rui', '@luna', '@noah', '@iris'
-];
+export interface PlantCommandRecord {
+  username: string;
+  message?: string;
+  plantedAt: string;
+}
+
+export interface PlantPreset {
+  id: string;
+  category: PlantCategory;
+  rarity: PlantRarity;
+  spritePool: string[];
+  scaleRange: [number, number];
+  shadow: PlantShadow;
+  filters?: string[];
+  leafPool?: string[];
+  glow?: string;
+  sparkle?: boolean;
+  bonusType?: BonusType;
+}
