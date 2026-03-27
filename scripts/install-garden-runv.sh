@@ -12,6 +12,24 @@ CERTBOT_EMAIL="${CERTBOT_EMAIL:-$ADMIN_EMAIL}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+rewrite_cond_file='RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-f'
+rewrite_cond_dir='RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-d'
+
+sync_apache_rewrite_rules() {
+  local conf_file="$1"
+  if [[ -f "$conf_file" ]]; then
+    sed -i \
+      -e 's|RewriteCond %{REQUEST_FILENAME} !-f|RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-f|g' \
+      -e 's|RewriteCond %{REQUEST_FILENAME} !-d|RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-d|g' \
+      -e '/RewriteEngine On/!b' \
+      "$conf_file"
+
+    if ! grep -Fq 'RewriteCond %{REQUEST_URI} !^/index\.html$' "$conf_file"; then
+      perl -0pi -e 's/RewriteEngine On\n/RewriteEngine On\n    RewriteCond %{REQUEST_URI} !^\/index\\.html\$\n/' "$conf_file"
+    fi
+  fi
+}
+
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Execute este script como root." >&2
   exit 1
@@ -86,6 +104,7 @@ sed \
   -e "s|__WEB_ROOT__|${WEB_ROOT}|g" \
   "$APP_DIR/deploy/apache/garden.runv.club.conf.template" \
   > "/etc/apache2/sites-available/${APP_DOMAIN}.conf"
+sync_apache_rewrite_rules "/etc/apache2/sites-available/${APP_DOMAIN}.conf"
 
 echo "[8/10] Ativando site e modulos..."
 a2enmod rewrite headers ssl >/dev/null
@@ -97,6 +116,10 @@ systemctl restart apache2
 
 echo "[9/10] Provisionando SSL valido com Certbot..."
 certbot --apache --non-interactive --agree-tos -m "$CERTBOT_EMAIL" -d "$APP_DOMAIN" --redirect
+sync_apache_rewrite_rules "/etc/apache2/sites-available/${APP_DOMAIN}.conf"
+sync_apache_rewrite_rules "/etc/apache2/sites-available/${APP_DOMAIN}-le-ssl.conf"
+apache2ctl configtest
+systemctl reload apache2
 certbot certificates | grep -q "Domains: ${APP_DOMAIN}"
 
 echo "[10/10] Garantindo renovacao automatica..."
