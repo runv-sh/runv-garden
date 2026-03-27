@@ -9,11 +9,11 @@ APP_DATA_DIR="${APP_DATA_DIR:-/var/lib/runv-garden/data}"
 REPO_URL="${REPO_URL:-}"
 REPO_REF="${REPO_REF:-main}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-$ADMIN_EMAIL}"
+PLANTIT_ROOT="/usr/local/bin/plantit-root"
+PLANTIT_USER="/usr/local/bin/plantit"
+PLANTIT_SUDOERS="/etc/sudoers.d/runv-garden-plantit"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-rewrite_cond_file='RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-f'
-rewrite_cond_dir='RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-d'
 
 sync_apache_rewrite_rules() {
   local conf_file="$1"
@@ -21,12 +21,37 @@ sync_apache_rewrite_rules() {
     sed -i \
       -e 's|RewriteCond %{REQUEST_FILENAME} !-f|RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-f|g' \
       -e 's|RewriteCond %{REQUEST_FILENAME} !-d|RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-d|g' \
-      -e '/RewriteEngine On/!b' \
       "$conf_file"
 
     if ! grep -Fq 'RewriteCond %{REQUEST_URI} !^/index\.html$' "$conf_file"; then
       perl -0pi -e 's/RewriteEngine On\n/RewriteEngine On\n    RewriteCond %{REQUEST_URI} !^\/index\\.html\$\n/' "$conf_file"
     fi
+  fi
+}
+
+install_plantit_command() {
+  cat >"$PLANTIT_ROOT" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec /usr/bin/env node "$APP_DIR/scripts/plantit.mjs" "\$@"
+EOF
+  chmod 755 "$PLANTIT_ROOT"
+
+  cat >"$PLANTIT_USER" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec sudo -n "$PLANTIT_ROOT" "\$@"
+EOF
+  chmod 755 "$PLANTIT_USER"
+
+  cat >"$PLANTIT_SUDOERS" <<EOF
+ALL ALL=(root) NOPASSWD: $PLANTIT_ROOT, $PLANTIT_ROOT *
+Defaults!$PLANTIT_ROOT !requiretty
+EOF
+  chmod 440 "$PLANTIT_SUDOERS"
+
+  if command -v visudo >/dev/null 2>&1; then
+    visudo -cf "$PLANTIT_SUDOERS" >/dev/null
   fi
 }
 
@@ -47,16 +72,16 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
-echo "[1/10] Instalando dependencias do sistema..."
+echo "[1/11] Instalando dependencias do sistema..."
 apt-get update
-apt-get install -y apache2 git curl ca-certificates npm nodejs rsync certbot python3-certbot-apache cron
+apt-get install -y apache2 git curl ca-certificates npm nodejs rsync certbot python3-certbot-apache cron sudo
 
-echo "[1.1/10] Validando Node e npm..."
+echo "[1.1/11] Validando Node e npm..."
 node -v
 npm -v
 node -e "const major = Number(process.versions.node.split('.')[0]); if (major < 20) { console.error('Node.js 20+ e obrigatorio.'); process.exit(1); }"
 
-echo "[2/10] Baixando ou atualizando o projeto..."
+echo "[2/11] Baixando ou atualizando o projeto..."
 if [[ -d "${APP_DIR}/.git" ]]; then
   git -C "$APP_DIR" fetch --all --tags
   git -C "$APP_DIR" checkout "$REPO_REF"
@@ -67,7 +92,7 @@ else
   git -C "$APP_DIR" checkout "$REPO_REF"
 fi
 
-echo "[3/10] Instalando dependencias JavaScript..."
+echo "[3/11] Instalando dependencias JavaScript..."
 cd "$APP_DIR"
 if [[ -f package-lock.json ]]; then
   npm ci
@@ -75,10 +100,10 @@ else
   npm install
 fi
 
-echo "[4/10] Gerando build de producao..."
+echo "[4/11] Gerando build de producao..."
 npm run build
 
-echo "[5/10] Preparando dados persistentes..."
+echo "[5/11] Preparando dados persistentes..."
 mkdir -p "$APP_DATA_DIR"
 if [[ ! -f "$APP_DATA_DIR/garden-plants.json" ]]; then
   if [[ -f "$WEB_ROOT/data/garden-plants.json" ]]; then
@@ -89,14 +114,16 @@ if [[ ! -f "$APP_DATA_DIR/garden-plants.json" ]]; then
     cp "$APP_DIR/dist/data/garden-plants.v0.0.1.json" "$APP_DATA_DIR/garden-plants.json"
   fi
 fi
+chmod 755 "$APP_DATA_DIR"
+chmod 644 "$APP_DATA_DIR/garden-plants.json"
 
-echo "[6/10] Publicando arquivos no DocumentRoot..."
+echo "[6/11] Publicando arquivos no DocumentRoot..."
 mkdir -p "$WEB_ROOT"
 rsync -a --delete "$APP_DIR/dist/" "$WEB_ROOT/"
 rm -rf "$WEB_ROOT/data"
 ln -sfn "$APP_DATA_DIR" "$WEB_ROOT/data"
 
-echo "[7/10] Criando configuracao do Apache..."
+echo "[7/11] Criando configuracao do Apache..."
 mkdir -p /etc/apache2/sites-available
 sed \
   -e "s|__APP_DOMAIN__|${APP_DOMAIN}|g" \
@@ -106,7 +133,7 @@ sed \
   > "/etc/apache2/sites-available/${APP_DOMAIN}.conf"
 sync_apache_rewrite_rules "/etc/apache2/sites-available/${APP_DOMAIN}.conf"
 
-echo "[8/10] Ativando site e modulos..."
+echo "[8/11] Ativando site e modulos..."
 a2enmod rewrite headers ssl >/dev/null
 a2dissite 000-default >/dev/null || true
 a2ensite "${APP_DOMAIN}.conf" >/dev/null
@@ -114,7 +141,7 @@ apache2ctl configtest
 systemctl enable apache2
 systemctl restart apache2
 
-echo "[9/10] Provisionando SSL valido com Certbot..."
+echo "[9/11] Provisionando SSL valido com Certbot..."
 certbot --apache --non-interactive --agree-tos -m "$CERTBOT_EMAIL" -d "$APP_DOMAIN" --redirect
 sync_apache_rewrite_rules "/etc/apache2/sites-available/${APP_DOMAIN}.conf"
 sync_apache_rewrite_rules "/etc/apache2/sites-available/${APP_DOMAIN}-le-ssl.conf"
@@ -122,7 +149,10 @@ apache2ctl configtest
 systemctl reload apache2
 certbot certificates | grep -q "Domains: ${APP_DOMAIN}"
 
-echo "[10/10] Garantindo renovacao automatica..."
+echo "[10/11] Instalando comando global plantit..."
+install_plantit_command
+
+echo "[11/11] Garantindo renovacao automatica..."
 if systemctl list-unit-files | grep -q '^certbot.timer'; then
   systemctl enable certbot.timer
   systemctl start certbot.timer
@@ -151,14 +181,17 @@ SSL:
   - certificado valido provisionado com Certbot
   - renovacao automatica ativada via certbot.timer ou cron
 
-Comando global planejado para o runv.club:
-  !plantar [mensagem opcional]
+Comando global Linux:
+  plantit [mensagem opcional]
+
+Exemplo:
+  plantit Tudo que e belo comeca de algum lugar!
 
 Regra de negocio:
-  - qualquer usuario do runv.club pode usar o comando
+  - qualquer usuario local pode usar o comando plantit
   - 1 planta por usuario a cada 24 horas
-  - frase aleatoria por plantio
-  - mensagem opcional anexada a planta
+  - a mensagem e anexada a planta
+  - o site passa a ler o JSON atualizado em ${APP_DATA_DIR}/garden-plants.json
 
 Observacao:
   Reexecutar este script atualiza o deploy sem perder o JSON persistente das plantas.

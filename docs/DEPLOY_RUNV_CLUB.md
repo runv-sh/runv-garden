@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Servir o front-end em `garden.runv.club` num servidor Debian 13 com Apache, e preparar a integracao futura com o `runv.club` para plantio via comando.
+Servir o front-end em `garden.runv.club` num servidor Debian 13 com Apache, e permitir plantio via comando global no terminal Linux.
 
 ## Front-end
 
@@ -45,8 +45,9 @@ Exemplo de `VirtualHost` para `garden.runv.club`:
     </Directory>
 
     RewriteEngine On
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} !^/index\.html$
+    RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-f
+    RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-d
     RewriteRule ^ /index.html [L]
 
     ErrorLog ${APACHE_LOG_DIR}/garden-error.log
@@ -56,11 +57,34 @@ Exemplo de `VirtualHost` para `garden.runv.club`:
 
 ## Dados persistentes
 
-O JSON ativo do jardim deve ficar fora do build, em:
+O JSON ativo do jardim fica em:
 
 - `/var/lib/runv-garden/data/garden-plants.json`
 
-Durante o deploy, o site publicado em `/var/www/garden.runv.club/data` passa a apontar para esse diretório persistente. Assim, reexecutar o instalador atualiza o front sem apagar as plantas.
+O site publicado em `/var/www/garden.runv.club/data` aponta para esse diretório persistente. Assim, reexecutar o instalador atualiza o front sem apagar as plantas.
+
+## Comando global Linux
+
+O instalador publica um comando global:
+
+```bash
+plantit [mensagem opcional]
+```
+
+Exemplos:
+
+```bash
+plantit
+plantit Tudo que e belo comeca de algum lugar!
+```
+
+Comportamento:
+
+- usa o nome do usuario Linux que executou o comando
+- grava no JSON persistente do jardim
+- aplica cooldown de 24 horas por usuario
+- coloca mensagem opcional junto da planta
+- a planta aparece no `garden.runv.club` apos atualizar a pagina
 
 ## Script oficial de instalacao
 
@@ -76,6 +100,7 @@ Ele provisiona:
 - SSL valido com Certbot
 - renovacao automatica via `certbot.timer` ou `cron`
 - dados persistentes em `/var/lib/runv-garden/data`
+- comando global `plantit`
 
 Pode ser reexecutado com seguranca para atualizar o deploy. O JSON persistente das plantas e preservado.
 
@@ -90,6 +115,7 @@ Por padrao ele:
 - desativa o site no Apache
 - remove o `DocumentRoot`
 - remove o `VirtualHost`
+- remove o comando global `plantit`
 - preserva certificado, codigo-fonte e dados persistentes
 
 Para apagar tambem certificado e codigo:
@@ -104,27 +130,12 @@ Para apagar tambem os dados persistentes das plantas:
 REMOVE_DATA=true bash scripts/uninstall-garden-runv.sh
 ```
 
-## Comando do runv.club
-
-Comando sugerido:
-
-```text
-!plantar [mensagem opcional]
-```
-
-Exemplos:
-
-```text
-!plantar
-!plantar Hoje deixo aqui um gesto de paz.
-```
-
 ## Regra de negocio
 
-Cada usuario:
+Cada usuario local:
 
 - pode plantar 1 planta a cada 24 horas
-- recebe uma frase aleatoria do jardim
+- recebe uma frase aleatoria no front
 - pode anexar uma mensagem opcional
 
 ## O que o front ja suporta
@@ -142,67 +153,8 @@ Arquivos relevantes:
 - [src/types.ts](Z:\Códigos\runv-garden\src\types.ts)
 - [src/data/gardenCommands.ts](Z:\Códigos\runv-garden\src\data\gardenCommands.ts)
 - [src/data/plantPhrases.ts](Z:\Códigos\runv-garden\src\data\plantPhrases.ts)
-
-## O que precisa de backend real
-
-Para "garantir" a regra de 24h por usuario no `runv.club`, isso precisa sair do browser e ir para o backend ou para o bot do servidor.
-
-Minimo necessario:
-
-1. identificar o usuario real do `runv.club`
-2. persistir `username`, `message`, `phrase`, `plantedAt`, `x`, `y`, `sprite`
-3. validar cooldown de 24h no servidor
-4. expor um endpoint para o front listar as plantas
-5. expor um endpoint ou webhook para o comando `!plantar`
-
-## Contrato sugerido
-
-### Criar planta
-
-`POST /api/garden/plants`
-
-```json
-{
-  "username": "auroramurad",
-  "message": "Hoje deixo aqui um gesto de paz."
-}
-```
-
-Resposta:
-
-```json
-{
-  "ok": true,
-  "plant": {
-    "id": "plant_123",
-    "creator": "auroramurad",
-    "phrase": "O jardim cresce devagar e bonito.",
-    "message": "Hoje deixo aqui um gesto de paz.",
-    "plantedAt": "2026-03-27T12:00:00Z"
-  }
-}
-```
-
-### Cooldown ativo
-
-```json
-{
-  "ok": false,
-  "reason": "cooldown_active",
-  "nextAllowedAt": "2026-03-28T12:00:00Z"
-}
-```
-
-### Listar plantas
-
-`GET /api/garden/plants`
+- [scripts/plantit.mjs](Z:\Códigos\runv-garden\scripts\plantit.mjs)
 
 ## Integracao recomendada
 
-Se o `runv.club` ja tiver bot, painel ou servico web:
-
-- o comando `!plantar` deve ser processado la
-- a API do jardim deve gravar no banco central
-- o front em `garden.runv.club` deve apenas consumir a lista de plantas
-
-Assim o Apache continua servindo o front, e a parte dinamica pode ficar atras de reverse proxy se necessario.
+Neste momento, o proprio terminal Linux ja consegue plantar no jardim via `plantit`. Se no futuro o `runv.club` tiver bot, painel ou servico web, esse mesmo fluxo pode ser ligado a outra interface, mantendo o mesmo JSON ou substituindo por banco/API.

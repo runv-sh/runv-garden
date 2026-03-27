@@ -118,9 +118,9 @@ function buildComposition(record: StoredPlantRecord): PlantComposition {
 }
 
 export async function fetchFakeGardenPlants(): Promise<PlantInstance[]> {
-  let response = await fetch('/data/garden-plants.json');
+  let response = await fetch('/data/garden-plants.json', {cache: 'no-store'});
   if (!response.ok) {
-    response = await fetch('/data/garden-plants.v0.0.1.json');
+    response = await fetch('/data/garden-plants.v0.0.1.json', {cache: 'no-store'});
   }
   if (!response.ok) {
     throw new Error('Nao foi possivel carregar o JSON local do jardim.');
