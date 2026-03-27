@@ -7,7 +7,9 @@ WEB_ROOT="${WEB_ROOT:-/var/www/${APP_DOMAIN}}"
 APP_DATA_DIR="${APP_DATA_DIR:-/var/lib/runv-garden/data}"
 PLANTIT_ROOT="/usr/local/bin/plantit-root"
 PLANTIT_USER="/usr/local/bin/plantit"
-PLANTIT_SUDOERS="/etc/sudoers.d/runv-garden-plantit"
+CLEANGARDEN_ROOT="/usr/local/bin/cleangarden-root"
+CLEANGARDEN_USER="/usr/local/bin/cleangarden"
+GARDEN_SUDOERS="/etc/sudoers.d/runv-garden-commands"
 REMOVE_CERTS="${REMOVE_CERTS:-false}"
 REMOVE_CODE="${REMOVE_CODE:-false}"
 REMOVE_DATA="${REMOVE_DATA:-false}"
@@ -55,8 +57,8 @@ fi
 echo "[2/8] Removendo conteudo publicado desta instalacao..."
 rm -rf "$WEB_ROOT"
 
-echo "[3/8] Removendo comando global plantit desta instalacao..."
-rm -f "$PLANTIT_USER" "$PLANTIT_ROOT" "$PLANTIT_SUDOERS"
+echo "[3/8] Removendo comandos globais desta instalacao..."
+rm -f "$PLANTIT_USER" "$PLANTIT_ROOT" "$CLEANGARDEN_USER" "$CLEANGARDEN_ROOT" "$GARDEN_SUDOERS"
 
 echo "[4/8] Removendo renovacao cron desta instalacao, se existir..."
 rm -f /etc/cron.d/certbot-renew-runv-garden
@@ -95,7 +97,7 @@ DocumentRoot removido: ${WEB_ROOT}
 Certificados removidos: ${REMOVE_CERTS}
 Codigo-fonte removido: ${REMOVE_CODE}
 Dados persistentes removidos: ${REMOVE_DATA}
-Comando plantit removido: true
+Comandos globais removidos: true
 
 Observacao:
   Apenas artefatos desta instalacao foram removidos.

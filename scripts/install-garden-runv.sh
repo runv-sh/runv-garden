@@ -9,9 +9,12 @@ APP_DATA_DIR="${APP_DATA_DIR:-/var/lib/runv-garden/data}"
 REPO_URL="${REPO_URL:-}"
 REPO_REF="${REPO_REF:-main}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-$ADMIN_EMAIL}"
+ALLOWED_CLEANGARDEN_USER="${ALLOWED_CLEANGARDEN_USER:-pmurad-admin}"
 PLANTIT_ROOT="/usr/local/bin/plantit-root"
 PLANTIT_USER="/usr/local/bin/plantit"
-PLANTIT_SUDOERS="/etc/sudoers.d/runv-garden-plantit"
+CLEANGARDEN_ROOT="/usr/local/bin/cleangarden-root"
+CLEANGARDEN_USER="/usr/local/bin/cleangarden"
+GARDEN_SUDOERS="/etc/sudoers.d/runv-garden-commands"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -30,39 +33,54 @@ sync_apache_rewrite_rules() {
 }
 
 harden_app_tree() {
-  chown -R root:root "$APP_DIR"
+  # Preserve the checkout ownership so the local admin user can keep using git.
   find "$APP_DIR" -type d -exec chmod 755 {} +
   find "$APP_DIR" -type f -exec chmod 644 {} +
   chmod 755 "$APP_DIR/scripts/install-garden-runv.sh" "$APP_DIR/scripts/uninstall-garden-runv.sh"
-  chmod 644 "$APP_DIR/scripts/plantit.mjs"
+  chmod 644 "$APP_DIR/scripts/plantit.mjs" "$APP_DIR/scripts/cleangarden.mjs"
 }
 
-install_plantit_command() {
+install_garden_commands() {
   cat >"$PLANTIT_ROOT" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 exec /usr/bin/env node "$APP_DIR/scripts/plantit.mjs" "\$@"
 EOF
-  chown root:root "$PLANTIT_ROOT"
-  chmod 755 "$PLANTIT_ROOT"
-
   cat >"$PLANTIT_USER" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 exec sudo -n "$PLANTIT_ROOT" "\$@"
 EOF
-  chown root:root "$PLANTIT_USER"
-  chmod 755 "$PLANTIT_USER"
-
-  cat >"$PLANTIT_SUDOERS" <<EOF
-ALL ALL=(root) NOPASSWD: $PLANTIT_ROOT, $PLANTIT_ROOT *
-Defaults!$PLANTIT_ROOT !requiretty
+  cat >"$CLEANGARDEN_ROOT" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export RUNV_GARDEN_ADMIN_USER="$ALLOWED_CLEANGARDEN_USER"
+exec /usr/bin/env node "$APP_DIR/scripts/cleangarden.mjs" "\$@"
 EOF
-  chown root:root "$PLANTIT_SUDOERS"
-  chmod 440 "$PLANTIT_SUDOERS"
+  cat >"$CLEANGARDEN_USER" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$(id -un)" != "$ALLOWED_CLEANGARDEN_USER" ]]; then
+  echo "Acesso negado." >&2
+  exit 1
+fi
+exec sudo -n "$CLEANGARDEN_ROOT" "\$@"
+EOF
+
+  chown root:root "$PLANTIT_ROOT" "$PLANTIT_USER" "$CLEANGARDEN_ROOT" "$CLEANGARDEN_USER"
+  chmod 755 "$PLANTIT_ROOT" "$PLANTIT_USER" "$CLEANGARDEN_ROOT" "$CLEANGARDEN_USER"
+
+  cat >"$GARDEN_SUDOERS" <<EOF
+ALL ALL=(root) NOPASSWD: $PLANTIT_ROOT, $PLANTIT_ROOT *
+$ALLOWED_CLEANGARDEN_USER ALL=(root) NOPASSWD: $CLEANGARDEN_ROOT, $CLEANGARDEN_ROOT *
+Defaults!$PLANTIT_ROOT !requiretty
+Defaults!$CLEANGARDEN_ROOT !requiretty
+EOF
+  chown root:root "$GARDEN_SUDOERS"
+  chmod 440 "$GARDEN_SUDOERS"
 
   if command -v visudo >/dev/null 2>&1; then
-    visudo -cf "$PLANTIT_SUDOERS" >/dev/null
+    visudo -cf "$GARDEN_SUDOERS" >/dev/null
   fi
 }
 
@@ -165,8 +183,8 @@ apache2ctl configtest
 systemctl reload apache2
 certbot certificates | grep -q "Domains: ${APP_DOMAIN}"
 
-echo "[11/11] Instalando comando global plantit e renovacao automatica..."
-install_plantit_command
+echo "[11/11] Instalando comandos globais e renovacao automatica..."
+install_garden_commands
 if systemctl list-unit-files | grep -q '^certbot.timer'; then
   systemctl enable certbot.timer
   systemctl start certbot.timer
@@ -195,19 +213,13 @@ Seguranca:
   - o nome exibido vem do usuario Linux real que executa o comando
   - o JSON do jardim e root:root
   - o codigo do deploy e root:root
-  - o comando global plantit escreve via sudo controlado
+  - os comandos globais escrevem via sudo controlado
 
 Comando global Linux:
   plantit [mensagem opcional]
 
 Exemplo:
   plantit Tudo que e belo comeca de algum lugar!
-
-Regra de negocio:
-  - qualquer usuario local pode usar o comando plantit
-  - 1 planta por usuario a cada 24 horas
-  - a mensagem e anexada a planta
-  - o site passa a ler o JSON atualizado em ${APP_DATA_DIR}/garden-plants.json
 
 Observacao:
   Reexecutar este script atualiza o deploy sem perder o JSON persistente das plantas.

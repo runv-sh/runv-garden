@@ -6,6 +6,8 @@ import path from 'node:path';
 const DATA_DIR = process.env.RUNV_GARDEN_DATA_DIR || '/var/lib/runv-garden/data';
 const DATA_FILE = path.join(DATA_DIR, 'garden-plants.json');
 const LOCK_DIR = path.join(DATA_DIR, '.plantit.lock');
+const LOCK_OWNER_FILE = path.join(LOCK_DIR, 'owner');
+const LOCK_MAX_AGE_MS = 60000;
 const WORLD_SIZE = 4200;
 const HERO_ID = 'hero-auroramurad';
 const COOLDOWN_HOURS = 24;
@@ -238,16 +240,60 @@ function writeGarden(payload) {
   fs.chmodSync(DATA_FILE, 0o644);
 }
 
+function removeLockDir() {
+  fs.rmSync(LOCK_DIR, {recursive: true, force: true});
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
+function shouldClearStaleLock() {
+  if (!fs.existsSync(LOCK_DIR)) {
+    return false;
+  }
+
+  try {
+    const stat = fs.statSync(LOCK_DIR);
+    if (Date.now() - stat.mtimeMs > LOCK_MAX_AGE_MS) {
+      return true;
+    }
+
+    if (!fs.existsSync(LOCK_OWNER_FILE)) {
+      return true;
+    }
+
+    const pid = Number(fs.readFileSync(LOCK_OWNER_FILE, 'utf8').trim());
+    if (!Number.isFinite(pid) || pid <= 0) {
+      return true;
+    }
+
+    return !isProcessAlive(pid);
+  } catch {
+    return true;
+  }
+}
+
 function lock() {
   const startedAt = Date.now();
   while (true) {
     try {
       fs.mkdirSync(LOCK_DIR, {mode: 0o700});
-      fs.writeFileSync(path.join(LOCK_DIR, 'owner'), `${process.pid}\n`, 'utf8');
+      fs.writeFileSync(LOCK_OWNER_FILE, `${process.pid}\n`, 'utf8');
       return;
     } catch (error) {
       if (error?.code !== 'EEXIST') {
         throw error;
+      }
+
+      if (shouldClearStaleLock()) {
+        removeLockDir();
+        continue;
       }
 
       if (Date.now() - startedAt > 5000) {
@@ -258,7 +304,7 @@ function lock() {
 }
 
 function unlock() {
-  fs.rmSync(LOCK_DIR, {recursive: true, force: true});
+  removeLockDir();
 }
 
 function getLatestUserPlant(plants, username) {
