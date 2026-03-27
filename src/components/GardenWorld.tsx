@@ -208,6 +208,7 @@ export const GardenWorld: React.FC = () => {
                 left: plant.x,
                 top: plant.y,
                 zIndex: Math.floor(plant.y),
+                transform: 'translate(-50%, -100%)',
               }}
               onClick={(event) => {
                 event.stopPropagation();
@@ -246,7 +247,7 @@ export const GardenWorld: React.FC = () => {
                     initial={{opacity: 0, scale: 0.92, y: 8}}
                     animate={{opacity: 1, scale: 1, y: 0}}
                     exit={{opacity: 0, scale: 0.92, y: 8}}
-                    className="absolute bottom-full left-1/2 z-[9999] mb-0 -translate-x-1/2 -translate-y-2 pointer-events-none"
+                    className="absolute bottom-full left-1/2 z-[9999] mb-1 -translate-x-1/2 pointer-events-none"
                   >
                     <div
                       className={`max-w-[240px] rounded-3xl px-4 py-3 text-[11px] font-semibold text-[#f7fbe9] shadow-2xl backdrop-blur ${
