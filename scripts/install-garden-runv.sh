@@ -46,21 +46,24 @@ install_garden_commands() {
 set -euo pipefail
 exec /usr/bin/env node "$APP_DIR/scripts/plantit.mjs" "\$@"
 EOF
+
   cat >"$PLANTIT_USER" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 exec sudo -n "$PLANTIT_ROOT" "\$@"
 EOF
+
   cat >"$CLEANGARDEN_ROOT" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 export RUNV_GARDEN_ADMIN_USER="$ALLOWED_CLEANGARDEN_USER"
 exec /usr/bin/env node "$APP_DIR/scripts/cleangarden.mjs" "\$@"
 EOF
+
   cat >"$CLEANGARDEN_USER" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "$(id -un)" != "$ALLOWED_CLEANGARDEN_USER" ]]; then
+if [[ "\$(id -un)" != "$ALLOWED_CLEANGARDEN_USER" ]]; then
   echo "Acesso negado." >&2
   exit 1
 fi
@@ -76,6 +79,7 @@ $ALLOWED_CLEANGARDEN_USER ALL=(root) NOPASSWD: $CLEANGARDEN_ROOT, $CLEANGARDEN_R
 Defaults!$PLANTIT_ROOT !requiretty
 Defaults!$CLEANGARDEN_ROOT !requiretty
 EOF
+
   chown root:root "$GARDEN_SUDOERS"
   chmod 440 "$GARDEN_SUDOERS"
 
