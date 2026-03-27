@@ -33,6 +33,9 @@ const getTooltipAnchorBottom = (plant: PlantInstance) => {
 
 export const GardenWorld: React.FC = () => {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const focusedPlantIdRef = useRef<string | null>(
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('focus') : null,
+  );
   const [offset, setOffset] = useState({x: 0, y: 0});
   const [zoom, setZoom] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
@@ -110,18 +113,23 @@ export const GardenWorld: React.FC = () => {
 
   useEffect(() => {
     const centerWorld = () => {
-      const viewportWidth = viewportRef.current?.clientWidth ?? window.innerWidth;
-      const viewportHeight = viewportRef.current?.clientHeight ?? window.innerHeight;
-      const focusX = heroPlant?.x ?? worldSize / 2;
-      const focusY = heroPlant?.y ?? worldSize / 2;
+      const focusedPlant = focusedPlantIdRef.current
+        ? plants.find((plant) => plant.id === focusedPlantIdRef.current) ?? null
+        : null;
+      const targetPlant = focusedPlant ?? heroPlant;
+      const focusX = targetPlant?.x ?? worldSize / 2;
+      const focusY = targetPlant?.y ?? worldSize / 2;
 
       setOffset(focusOnPoint(focusX, focusY, zoom));
+      if (focusedPlant) {
+        setSelectedPlant(focusedPlant);
+      }
     };
 
     centerWorld();
     window.addEventListener('resize', centerWorld);
     return () => window.removeEventListener('resize', centerWorld);
-  }, [heroPlant, worldSize, zoom]);
+  }, [heroPlant, plants, worldSize, zoom]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);

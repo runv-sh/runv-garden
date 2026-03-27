@@ -10,6 +10,8 @@ const WORLD_SIZE = 4200;
 const HERO_ID = 'hero-auroramurad';
 const COOLDOWN_HOURS = 24;
 const MAX_MESSAGE_LENGTH = 220;
+const HERO_RING_MIN_DISTANCE = 220;
+const HERO_RING_MAX_DISTANCE = 980;
 const PRESET_POOL = ['flower-soft', 'flower-rare', 'cactus', 'bush', 'mushroom', 'tree-green', 'tree-rosy', 'special-fern'];
 const BONUS_POOL = ['7days', '30days', '90days', '180days'];
 
@@ -24,6 +26,7 @@ Regras:
   - 1 planta por usuario Linux a cada 24 horas
   - o nome exibido no site vem do usuario Linux que executou o comando
   - a planta vai para o garden.runv.club
+  - novas plantas crescem ao redor da homenagem central
   - a mensagem e opcional`);
 }
 
@@ -65,25 +68,30 @@ function distance(a, b) {
 
 function pickPosition(plants, seed) {
   const hero = plants.find((plant) => plant.id === HERO_ID);
-  const margin = 320;
-  let best = {x: WORLD_SIZE / 2, y: WORLD_SIZE / 2};
+  const margin = 240;
+  const center = hero ? {x: hero.x, y: hero.y} : {x: WORLD_SIZE / 2, y: WORLD_SIZE / 2};
+  let best = center;
   let bestScore = -1;
+  const idealRadius = (HERO_RING_MIN_DISTANCE + HERO_RING_MAX_DISTANCE) / 2;
 
   for (let attempt = 0; attempt < 360; attempt += 1) {
-    const x = Math.round(margin + ratio(seed, attempt + 1) * (WORLD_SIZE - margin * 2));
-    const y = Math.round(margin + ratio(seed, attempt + 501) * (WORLD_SIZE - margin * 2));
+    const angle = ratio(seed, attempt + 1) * Math.PI * 2;
+    const radius = HERO_RING_MIN_DISTANCE + ratio(seed, attempt + 501) * (HERO_RING_MAX_DISTANCE - HERO_RING_MIN_DISTANCE);
+    const x = Math.round(Math.max(margin, Math.min(WORLD_SIZE - margin, center.x + Math.cos(angle) * radius)));
+    const y = Math.round(Math.max(margin, Math.min(WORLD_SIZE - margin, center.y + Math.sin(angle) * radius)));
     const candidate = {x, y};
 
     const nearestPlant = plants.reduce((min, plant) => Math.min(min, distance(candidate, plant)), Infinity);
-    const heroDistance = hero ? distance(candidate, hero) : Infinity;
+    const heroDistance = hero ? distance(candidate, hero) : distance(candidate, center);
     const edgeDistance = Math.min(x, y, WORLD_SIZE - x, WORLD_SIZE - y);
-    const score = Math.min(nearestPlant, heroDistance * 0.9, edgeDistance * 1.2);
+    const ringDistance = Math.abs(heroDistance - idealRadius);
+    const score = Math.min(nearestPlant * 1.35, edgeDistance * 1.1, HERO_RING_MAX_DISTANCE - ringDistance);
 
-    if (heroDistance < 260) {
+    if (heroDistance < HERO_RING_MIN_DISTANCE || heroDistance > HERO_RING_MAX_DISTANCE) {
       continue;
     }
 
-    if (nearestPlant >= 170) {
+    if (nearestPlant >= 150) {
       return candidate;
     }
 
