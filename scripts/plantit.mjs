@@ -21,14 +21,27 @@ Exemplos:
   plantit Tudo que e belo comeca de algum lugar!
 
 Regras:
-  - 1 planta por usuario a cada 24 horas
+  - 1 planta por usuario Linux a cada 24 horas
+  - o nome exibido no site vem do usuario Linux que executou o comando
   - a planta vai para o garden.runv.club
   - a mensagem e opcional`);
 }
 
+function ensureSecureExecution() {
+  if (typeof process.getuid === 'function' && process.getuid() !== 0) {
+    throw new Error('Use o comando global plantit instalado pelo deploy.');
+  }
+}
+
 function getUsername() {
-  const raw = process.env.SUDO_USER || process.env.USER || process.env.LOGNAME || os.userInfo().username;
+  const raw = process.env.SUDO_USER || (typeof process.getuid === 'function' && process.getuid() === 0 ? 'root' : os.userInfo().username);
   return raw.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '-').slice(0, 32) || 'anon';
+}
+
+function sanitizeMessage(value) {
+  const compact = value.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const cleaned = compact.replace(/[^\p{L}\p{N}\p{P}\p{Zs}]/gu, '');
+  return cleaned.slice(0, MAX_MESSAGE_LENGTH) || undefined;
 }
 
 function hashSeed(seed) {
@@ -83,11 +96,24 @@ function pickPosition(plants, seed) {
   return best;
 }
 
-function readGarden() {
+function ensureDataFiles() {
+  if (!fs.existsSync(DATA_DIR)) {
+    throw new Error(`Diretorio de dados nao encontrado em ${DATA_DIR}.`);
+  }
+
   if (!fs.existsSync(DATA_FILE)) {
     throw new Error(`Arquivo do jardim nao encontrado em ${DATA_FILE}.`);
   }
 
+  const dirStat = fs.statSync(DATA_DIR);
+  const fileStat = fs.statSync(DATA_FILE);
+  if (dirStat.uid !== 0 || fileStat.uid !== 0) {
+    throw new Error('Os dados do jardim precisam pertencer ao root para manter a seguranca do comando.');
+  }
+}
+
+function readGarden() {
+  ensureDataFiles();
   const raw = fs.readFileSync(DATA_FILE, 'utf8');
   return JSON.parse(raw);
 }
@@ -96,13 +122,15 @@ function writeGarden(payload) {
   const tempFile = path.join(DATA_DIR, `garden-plants.${process.pid}.${Date.now()}.tmp`);
   fs.writeFileSync(tempFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
   fs.renameSync(tempFile, DATA_FILE);
+  fs.chownSync(DATA_FILE, 0, 0);
+  fs.chmodSync(DATA_FILE, 0o644);
 }
 
 function lock() {
   const startedAt = Date.now();
   while (true) {
     try {
-      fs.mkdirSync(LOCK_DIR);
+      fs.mkdirSync(LOCK_DIR, {mode: 0o700});
       fs.writeFileSync(path.join(LOCK_DIR, 'owner'), `${process.pid}\n`, 'utf8');
       return;
     } catch (error) {
@@ -152,7 +180,7 @@ function createPlantRecord(plants, username, message, now) {
   const record = {
     id: `plant-${username}-${now.getTime()}`,
     username,
-    message: message || undefined,
+    message,
     plantedAt: nowIso,
     x: position.x,
     y: position.y,
@@ -174,8 +202,10 @@ function main() {
     process.exit(0);
   }
 
+  ensureSecureExecution();
+
   const username = getUsername();
-  const message = args.join(' ').trim().slice(0, MAX_MESSAGE_LENGTH);
+  const message = sanitizeMessage(args.join(' '));
   const now = new Date();
 
   lock();
@@ -193,7 +223,7 @@ function main() {
       process.exit(1);
     }
 
-    const record = createPlantRecord(payload.plants, username, message || undefined, now);
+    const record = createPlantRecord(payload.plants, username, message, now);
     payload.plants.push(record);
     writeGarden(payload);
 

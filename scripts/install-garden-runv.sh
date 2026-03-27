@@ -29,12 +29,21 @@ sync_apache_rewrite_rules() {
   fi
 }
 
+harden_app_tree() {
+  chown -R root:root "$APP_DIR"
+  find "$APP_DIR" -type d -exec chmod 755 {} +
+  find "$APP_DIR" -type f -exec chmod 644 {} +
+  chmod 755 "$APP_DIR/scripts/install-garden-runv.sh" "$APP_DIR/scripts/uninstall-garden-runv.sh"
+  chmod 644 "$APP_DIR/scripts/plantit.mjs"
+}
+
 install_plantit_command() {
   cat >"$PLANTIT_ROOT" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 exec /usr/bin/env node "$APP_DIR/scripts/plantit.mjs" "\$@"
 EOF
+  chown root:root "$PLANTIT_ROOT"
   chmod 755 "$PLANTIT_ROOT"
 
   cat >"$PLANTIT_USER" <<EOF
@@ -42,12 +51,14 @@ EOF
 set -euo pipefail
 exec sudo -n "$PLANTIT_ROOT" "\$@"
 EOF
+  chown root:root "$PLANTIT_USER"
   chmod 755 "$PLANTIT_USER"
 
   cat >"$PLANTIT_SUDOERS" <<EOF
 ALL ALL=(root) NOPASSWD: $PLANTIT_ROOT, $PLANTIT_ROOT *
 Defaults!$PLANTIT_ROOT !requiretty
 EOF
+  chown root:root "$PLANTIT_SUDOERS"
   chmod 440 "$PLANTIT_SUDOERS"
 
   if command -v visudo >/dev/null 2>&1; then
@@ -114,6 +125,7 @@ if [[ ! -f "$APP_DATA_DIR/garden-plants.json" ]]; then
     cp "$APP_DIR/dist/data/garden-plants.v0.0.1.json" "$APP_DATA_DIR/garden-plants.json"
   fi
 fi
+chown -R root:root "$APP_DATA_DIR"
 chmod 755 "$APP_DATA_DIR"
 chmod 644 "$APP_DATA_DIR/garden-plants.json"
 
@@ -122,8 +134,12 @@ mkdir -p "$WEB_ROOT"
 rsync -a --delete "$APP_DIR/dist/" "$WEB_ROOT/"
 rm -rf "$WEB_ROOT/data"
 ln -sfn "$APP_DATA_DIR" "$WEB_ROOT/data"
+chown -h root:root "$WEB_ROOT/data"
 
-echo "[7/11] Criando configuracao do Apache..."
+echo "[7/11] Endurecendo permissoes do codigo..."
+harden_app_tree
+
+echo "[8/11] Criando configuracao do Apache..."
 mkdir -p /etc/apache2/sites-available
 sed \
   -e "s|__APP_DOMAIN__|${APP_DOMAIN}|g" \
@@ -133,7 +149,7 @@ sed \
   > "/etc/apache2/sites-available/${APP_DOMAIN}.conf"
 sync_apache_rewrite_rules "/etc/apache2/sites-available/${APP_DOMAIN}.conf"
 
-echo "[8/11] Ativando site e modulos..."
+echo "[9/11] Ativando site e modulos..."
 a2enmod rewrite headers ssl >/dev/null
 a2dissite 000-default >/dev/null || true
 a2ensite "${APP_DOMAIN}.conf" >/dev/null
@@ -141,7 +157,7 @@ apache2ctl configtest
 systemctl enable apache2
 systemctl restart apache2
 
-echo "[9/11] Provisionando SSL valido com Certbot..."
+echo "[10/11] Provisionando SSL valido com Certbot..."
 certbot --apache --non-interactive --agree-tos -m "$CERTBOT_EMAIL" -d "$APP_DOMAIN" --redirect
 sync_apache_rewrite_rules "/etc/apache2/sites-available/${APP_DOMAIN}.conf"
 sync_apache_rewrite_rules "/etc/apache2/sites-available/${APP_DOMAIN}-le-ssl.conf"
@@ -149,10 +165,8 @@ apache2ctl configtest
 systemctl reload apache2
 certbot certificates | grep -q "Domains: ${APP_DOMAIN}"
 
-echo "[10/11] Instalando comando global plantit..."
+echo "[11/11] Instalando comando global plantit e renovacao automatica..."
 install_plantit_command
-
-echo "[11/11] Garantindo renovacao automatica..."
 if systemctl list-unit-files | grep -q '^certbot.timer'; then
   systemctl enable certbot.timer
   systemctl start certbot.timer
@@ -177,9 +191,11 @@ Codigo-fonte: ${APP_DIR}
 Repositorio detectado: ${REPO_URL}
 Dados persistentes: ${APP_DATA_DIR}/garden-plants.json
 
-SSL:
-  - certificado valido provisionado com Certbot
-  - renovacao automatica ativada via certbot.timer ou cron
+Seguranca:
+  - o nome exibido vem do usuario Linux real que executa o comando
+  - o JSON do jardim e root:root
+  - o codigo do deploy e root:root
+  - o comando global plantit escreve via sudo controlado
 
 Comando global Linux:
   plantit [mensagem opcional]
