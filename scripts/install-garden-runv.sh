@@ -5,6 +5,7 @@ APP_DOMAIN="${APP_DOMAIN:-garden.runv.club}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-pablomurad@pm.me}"
 APP_DIR="${APP_DIR:-/opt/runv-garden}"
 WEB_ROOT="${WEB_ROOT:-/var/www/${APP_DOMAIN}}"
+APP_DATA_DIR="${APP_DATA_DIR:-/var/lib/runv-garden/data}"
 REPO_URL="${REPO_URL:-}"
 REPO_REF="${REPO_REF:-main}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-$ADMIN_EMAIL}"
@@ -28,16 +29,16 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
-echo "[1/9] Instalando dependencias do sistema..."
+echo "[1/10] Instalando dependencias do sistema..."
 apt-get update
 apt-get install -y apache2 git curl ca-certificates npm nodejs rsync certbot python3-certbot-apache cron
 
-echo "[1.1/9] Validando Node e npm..."
+echo "[1.1/10] Validando Node e npm..."
 node -v
 npm -v
 node -e "const major = Number(process.versions.node.split('.')[0]); if (major < 20) { console.error('Node.js 20+ e obrigatorio.'); process.exit(1); }"
 
-echo "[2/9] Baixando ou atualizando o projeto..."
+echo "[2/10] Baixando ou atualizando o projeto..."
 if [[ -d "${APP_DIR}/.git" ]]; then
   git -C "$APP_DIR" fetch --all --tags
   git -C "$APP_DIR" checkout "$REPO_REF"
@@ -48,7 +49,7 @@ else
   git -C "$APP_DIR" checkout "$REPO_REF"
 fi
 
-echo "[3/9] Instalando dependencias JavaScript..."
+echo "[3/10] Instalando dependencias JavaScript..."
 cd "$APP_DIR"
 if [[ -f package-lock.json ]]; then
   npm ci
@@ -56,14 +57,28 @@ else
   npm install
 fi
 
-echo "[4/9] Gerando build de producao..."
+echo "[4/10] Gerando build de producao..."
 npm run build
 
-echo "[5/9] Publicando arquivos no DocumentRoot..."
+echo "[5/10] Preparando dados persistentes..."
+mkdir -p "$APP_DATA_DIR"
+if [[ ! -f "$APP_DATA_DIR/garden-plants.json" ]]; then
+  if [[ -f "$WEB_ROOT/data/garden-plants.json" ]]; then
+    cp "$WEB_ROOT/data/garden-plants.json" "$APP_DATA_DIR/garden-plants.json"
+  elif [[ -f "$APP_DIR/dist/data/garden-plants.json" ]]; then
+    cp "$APP_DIR/dist/data/garden-plants.json" "$APP_DATA_DIR/garden-plants.json"
+  elif [[ -f "$APP_DIR/dist/data/garden-plants.v0.0.1.json" ]]; then
+    cp "$APP_DIR/dist/data/garden-plants.v0.0.1.json" "$APP_DATA_DIR/garden-plants.json"
+  fi
+fi
+
+echo "[6/10] Publicando arquivos no DocumentRoot..."
 mkdir -p "$WEB_ROOT"
 rsync -a --delete "$APP_DIR/dist/" "$WEB_ROOT/"
+rm -rf "$WEB_ROOT/data"
+ln -sfn "$APP_DATA_DIR" "$WEB_ROOT/data"
 
-echo "[6/9] Criando configuracao do Apache..."
+echo "[7/10] Criando configuracao do Apache..."
 mkdir -p /etc/apache2/sites-available
 sed \
   -e "s|__APP_DOMAIN__|${APP_DOMAIN}|g" \
@@ -72,7 +87,7 @@ sed \
   "$APP_DIR/deploy/apache/garden.runv.club.conf.template" \
   > "/etc/apache2/sites-available/${APP_DOMAIN}.conf"
 
-echo "[7/9] Ativando site e modulos..."
+echo "[8/10] Ativando site e modulos..."
 a2enmod rewrite headers ssl >/dev/null
 a2dissite 000-default >/dev/null || true
 a2ensite "${APP_DOMAIN}.conf" >/dev/null
@@ -80,11 +95,11 @@ apache2ctl configtest
 systemctl enable apache2
 systemctl restart apache2
 
-echo "[8/9] Provisionando SSL valido com Certbot..."
+echo "[9/10] Provisionando SSL valido com Certbot..."
 certbot --apache --non-interactive --agree-tos -m "$CERTBOT_EMAIL" -d "$APP_DOMAIN" --redirect
 certbot certificates | grep -q "Domains: ${APP_DOMAIN}"
 
-echo "[9/9] Garantindo renovacao automatica..."
+echo "[10/10] Garantindo renovacao automatica..."
 if systemctl list-unit-files | grep -q '^certbot.timer'; then
   systemctl enable certbot.timer
   systemctl start certbot.timer
@@ -107,6 +122,7 @@ Dominio: ${APP_DOMAIN}
 DocumentRoot: ${WEB_ROOT}
 Codigo-fonte: ${APP_DIR}
 Repositorio detectado: ${REPO_URL}
+Dados persistentes: ${APP_DATA_DIR}/garden-plants.json
 
 SSL:
   - certificado valido provisionado com Certbot
@@ -122,6 +138,6 @@ Regra de negocio:
   - mensagem opcional anexada a planta
 
 Observacao:
-  O front ja esta publicado. A garantia do cooldown de 24h e do comando global ainda precisa ser implementada no backend/bot do runv.club.
+  Reexecutar este script atualiza o deploy sem perder o JSON persistente das plantas.
 
 EOF

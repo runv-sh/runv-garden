@@ -36,9 +36,9 @@ Exemplo de `VirtualHost` para `garden.runv.club`:
 <VirtualHost *:80>
     ServerName garden.runv.club
     ServerAdmin pablomurad@pm.me
-    DocumentRoot /var/www/garden.runv.club/dist
+    DocumentRoot /var/www/garden.runv.club
 
-    <Directory /var/www/garden.runv.club/dist>
+    <Directory /var/www/garden.runv.club>
         Options FollowSymLinks
         AllowOverride All
         Require all granted
@@ -54,6 +54,14 @@ Exemplo de `VirtualHost` para `garden.runv.club`:
 </VirtualHost>
 ```
 
+## Dados persistentes
+
+O JSON ativo do jardim deve ficar fora do build, em:
+
+- `/var/lib/runv-garden/data/garden-plants.json`
+
+Durante o deploy, o site publicado em `/var/www/garden.runv.club/data` passa a apontar para esse diretório persistente. Assim, reexecutar o instalador atualiza o front sem apagar as plantas.
+
 ## Script oficial de instalacao
 
 Use:
@@ -67,6 +75,9 @@ Ele provisiona:
 - build do front
 - SSL valido com Certbot
 - renovacao automatica via `certbot.timer` ou `cron`
+- dados persistentes em `/var/lib/runv-garden/data`
+
+Pode ser reexecutado com seguranca para atualizar o deploy. O JSON persistente das plantas e preservado.
 
 ## Script oficial de desinstalacao
 
@@ -79,12 +90,18 @@ Por padrao ele:
 - desativa o site no Apache
 - remove o `DocumentRoot`
 - remove o `VirtualHost`
-- preserva certificado e codigo-fonte
+- preserva certificado, codigo-fonte e dados persistentes
 
 Para apagar tambem certificado e codigo:
 
 ```bash
 REMOVE_CERTS=true REMOVE_CODE=true bash scripts/uninstall-garden-runv.sh
+```
+
+Para apagar tambem os dados persistentes das plantas:
+
+```bash
+REMOVE_DATA=true bash scripts/uninstall-garden-runv.sh
 ```
 
 ## Comando do runv.club
@@ -123,8 +140,8 @@ Modelo pronto para:
 Arquivos relevantes:
 
 - [src/types.ts](Z:\Códigos\runv-garden\src\types.ts)
-- [src/data\gardenCommands.ts](Z:\Códigos\runv-garden\src\data\gardenCommands.ts)
-- [src/data\plantPhrases.ts](Z:\Códigos\runv-garden\src\data\plantPhrases.ts)
+- [src/data/gardenCommands.ts](Z:\Códigos\runv-garden\src\data\gardenCommands.ts)
+- [src/data/plantPhrases.ts](Z:\Códigos\runv-garden\src\data\plantPhrases.ts)
 
 ## O que precisa de backend real
 
@@ -189,4 +206,3 @@ Se o `runv.club` ja tiver bot, painel ou servico web:
 - o front em `garden.runv.club` deve apenas consumir a lista de plantas
 
 Assim o Apache continua servindo o front, e a parte dinamica pode ficar atras de reverse proxy se necessario.
-
