@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --font-pixel: "Press Start 2P", system-ui;
+  --font-sans: "Inter", system-ui, sans-serif;
+  
+  --color-garden-bg: #88aa55;
+  --color-garden-grid: #779944;
+}
+
+@layer base {
+  body {
+    @apply bg-[#f0f4f0] text-[#2d3a2d] font-sans antialiased overflow-hidden select-none;
+  }
+}
+
+/* Pixel Art Rendering */
+svg, img {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.pixel-shadow {
+  filter: drop-shadow(4px 4px 0px rgba(0,0,0,0.15));
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #779944;
+  border-radius: 4px;
+}
+
+.cursor-grab {
+  cursor: grab;
+}
+.cursor-grabbing {
+  cursor: grabbing;
+}
+
+/* Tooltip animation */
+@keyframes tooltip-pop {
+  0% { transform: scale(0.8) translateY(10px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.tooltip-pop {
+  animation: tooltip-pop 0.15s ease-out forwards;
+}
