@@ -8,15 +8,21 @@ WEB_ROOT="${WEB_ROOT:-/var/www/${APP_DOMAIN}}"
 REPO_URL="${REPO_URL:-}"
 REPO_REF="${REPO_REF:-main}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-$ADMIN_EMAIL}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Execute este script como root." >&2
   exit 1
 fi
 
+if [[ -z "$REPO_URL" ]] && [[ -d "${DEFAULT_REPO_DIR}/.git" ]]; then
+  REPO_URL="$(git -C "$DEFAULT_REPO_DIR" config --get remote.origin.url || true)"
+fi
+
 if [[ -z "$REPO_URL" ]]; then
-  echo "Defina REPO_URL antes de executar. Exemplo:" >&2
-  echo "REPO_URL='https://github.com/seu-org/runv-garden.git' bash scripts/install-garden-runv.sh" >&2
+  echo "Nao foi possivel detectar o repositorio automaticamente." >&2
+  echo "Execute o script a partir de um checkout git valido ou defina REPO_URL manualmente." >&2
   exit 1
 fi
 
@@ -100,6 +106,7 @@ Deploy concluido com SSL obrigatorio.
 Dominio: ${APP_DOMAIN}
 DocumentRoot: ${WEB_ROOT}
 Codigo-fonte: ${APP_DIR}
+Repositorio detectado: ${REPO_URL}
 
 SSL:
   - certificado valido provisionado com Certbot
